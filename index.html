@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MATRET Bot</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f8fa;
+            font-family: Arial, sans-serif;
+        }
+
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chat-box {
+            width: 400px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+        }
+
+        .user-message {
+            text-align: right;
+        }
+
+        .bot-message {
+            text-align: left;
+        }
+
+        .user-bubble {
+            background-color: #c4def6;
+            color: #333333;
+            padding: 10px 16px;
+            border-radius: 16px;
+            display: inline-block;
+            max-width: 80%;
+        }
+
+        .bot-bubble {
+            background-color: #f2f2f2;
+            color: #333333;
+            padding: 10px 16px;
+            border-radius: 16px;
+            display: inline-block;
+            max-width: 80%;
+        }
+
+        .input-container {
+            display: flex;
+            margin-top: 16px;
+        }
+
+        .input-container input {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #cccccc;
+        }
+
+        .input-container button {
+            background-color: #bae1ff;
+            color: #333333;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-box" id="chat-box">
+            <div id="chat-container"></div>
+            <div class="input-container">
+                <input type="text" id="user-input" placeholder="Ask a question..." onkeydown="handleKeyPress(event)">
+                <button onclick="getResponse()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let aiKnowledge = {};
+
+        function loadAiKnowledge() {
+            fetch('ai.json')
+                .then(response => response.json())
+                .then(data => {
+                    aiKnowledge = data;
+                    console.log('AI knowledge loaded:', aiKnowledge);
+                })
+                .catch(error => {
+                    console.error('Failed to load AI knowledge:', error);
+                });
+        }
+
+        function saveAiKnowledge() {
+            const jsonData = JSON.stringify(aiKnowledge, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'ai.json';
+            link.click();
+        }
+
+        function calculateSimilarity(prompt1, prompt2) {
+          const prompt1Length = prompt1.length;
+    const prompt2Length = prompt2.length;
+    const matrix = [];
+
+    // Initialize the matrix
+    for (let i = 0; i <= prompt1Length; i++) {
+        matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= prompt2Length; j++) {
+        matrix[0][j] = j;
+    }
+
+    // Calculate the Levenshtein distance
+    for (let i = 1; i <= prompt1Length; i++) {
+        for (let j = 1; j <= prompt2Length; j++) {
+            const cost = (prompt1[i - 1] === prompt2[j - 1]) ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,        // Deletion
+                matrix[i][j - 1] + 1,        // Insertion
+                matrix[i - 1][j - 1] + cost  // Substitution
+            );
+        }
+    }
+
+    // Calculate similarity as 1 - (Levenshtein distance / max length)
+    const maxDistance = Math.max(prompt1Length, prompt2Length);
+    const similarity = 1 - (matrix[prompt1Length][prompt2Length] / maxDistance);
+
+    return similarity;
+        }
+
+        function findBestMatch(userPrompt) {
+            let bestSimilarity = 0;
+            let bestMatch = null;
+
+            for (const prompt in aiKnowledge) {
+                const similarity = calculateSimilarity(userPrompt, prompt);
+
+                if (similarity > bestSimilarity) {
+                    bestSimilarity = similarity;
+                    bestMatch = prompt;
+                    console.log();
+                }
+            }
+
+            return (bestSimilarity > 0.5) ? bestMatch : null;
+        }
+
+        function addPromptResponse(prompt, response) {
+            aiKnowledge[prompt] = response;
+            saveAiKnowledge();
+        }
+
+        function getResponse() {
+            const userInput = document.getElementById('user-input');
+            const userPrompt = userInput.value.trim();
+
+            if (userPrompt !== '') {
+                const chatContainer = document.getElementById('chat-container');
+
+                // User message
+                const userMessageElement = document.createElement('div');
+                userMessageElement.className = 'message user-message';
+                const userBubble = document.createElement('div');
+                userBubble.className = 'user-bubble';
+                userBubble.textContent = userPrompt;
+                userMessageElement.appendChild(userBubble);
+                chatContainer.appendChild(userMessageElement);
+
+                const bestMatch = findBestMatch(userPrompt);
+
+                if (bestMatch) {
+                    // Bot message
+                    const botMessageElement = document.createElement('div');
+                    botMessageElement.className = 'message bot-message';
+                    const botBubble = document.createElement('div');
+                    botBubble.className = 'bot-bubble';
+                    botBubble.textContent = aiKnowledge[bestMatch];
+                    botMessageElement.appendChild(botBubble);
+                    chatContainer.appendChild(botMessageElement);
+                } else {
+                    // Bot message asking for response
+                    const botMessageElement = document.createElement('div');
+                    botMessageElement.className = 'message bot-message';
+                    const botBubble = document.createElement('div');
+                    botBubble.className = 'bot-bubble';
+                    botBubble.textContent = 'I\'m sorry, I didn\'t understand. Please provide the appropriate response.';
+                    botMessageElement.appendChild(botBubble);
+                    chatContainer.appendChild(botMessageElement);
+
+                    // Clear user input
+                    userInput.value = '';
+
+                    // User response input
+                    userInput.placeholder = 'Enter the response...';
+                    userInput.onkeydown = handleTeachKeyPress;
+                    userInput.setAttribute('data-prompt', userPrompt);
+                }
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.keyCode === 13) {
+                getResponse();
+            }
+        }
+
+        function handleTeachKeyPress(event) {
+            if (event.keyCode === 13) {
+                const userInput = document.getElementById('user-input');
+                const userResponse = userInput.value.trim();
+
+                if (userResponse !== '') {
+                    const userPrompt = userInput.getAttribute('data-prompt');
+                    addPromptResponse(userPrompt, userResponse);
+
+                    // Bot message acknowledging the response
+                    const chatContainer = document.getElementById('chat-container');
+                    const botMessageElement = document.createElement('div');
+                    botMessageElement.className = 'message bot-message';
+                    const botBubble = document.createElement('div');
+                    botBubble.className = 'bot-bubble';
+                    botBubble.textContent = 'Thank you for teaching me!';
+                    botMessageElement.appendChild(botBubble);
+                    chatContainer.appendChild(botMessageElement);
+
+                    // Clear user input and restore its default behavior
+                    userInput.value = '';
+                    userInput.placeholder = 'Ask a question...';
+                    userInput.onkeydown = handleKeyPress;
+                }
+            }
+        }
+
+        loadAiKnowledge();
+    </script>
+</body>
+</html>
